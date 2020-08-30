@@ -4,6 +4,7 @@ import zlib
 import schedule
 import time
 
+configFile = 'Relay.ini'
 mySwitches = list()
 
 class Switch:
@@ -17,7 +18,15 @@ class Switch:
     def Stop (self):
         print ("{} stopped".format(self.Name))
 
-def LoadConfig(file = 'Relay.ini'):
+def crc(fileName):
+    prev = 0
+    for eachLine in open(fileName,"rb"):
+        prev = zlib.crc32(eachLine, prev)
+    return "%X"%(prev & 0xFFFFFFFF)
+
+configCRC = crc(configFile)
+
+def LoadConfig(file = configFile):
     config = configparser.RawConfigParser()
     config.read(file)
 
@@ -31,26 +40,22 @@ def LoadConfig(file = 'Relay.ini'):
                 s.GPIOchannel = value
         mySwitches.append(s)
     
-def crc(fileName):
-    prev = 0
-    for eachLine in open(fileName,"rb"):
-        prev = zlib.crc32(eachLine, prev)
-    return "%X"%(prev & 0xFFFFFFFF)
+    for s in mySwitches:
+        print ('Switch {} using GPIO#{}'.format(s.Name, s.GPIOchannel))
 
-configCRC = crc('Relay.ini')
-
-def job():
-    if configCRC == crc('Relay.ini'):
+def jobCheckConfig():
+    global configCRC
+    if configCRC == crc(configFile):
         print('Configuration unchaged')
+    else:
+        print('Configuration chaged... Reloading')
+        mySwitches.clear()
+        LoadConfig()
+        configCRC = crc(configFile)
 
 LoadConfig()
-schedule.every(1).seconds.do(job)
-
-for s in mySwitches:
-    print ('Switch {} using GPIO#{}'.format(s.Name, s.GPIOchannel))
+schedule.every(1).seconds.do(jobCheckConfig)
 
 while 1:
     schedule.run_pending()
     time.sleep(0.1)
-
-
