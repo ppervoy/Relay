@@ -11,12 +11,19 @@ class Switch:
     _Name = ""
     _GPIOchannel = 0
     _Type = "Sun"
+    _On = ""
+    _Off = ""
+    
+    def Blink (self):
+        print("     * from {}".format(self.GPIOchannel))
     
     def Start (self):
-        print ("{} started".format(self.Name))
+        print ("'{}' started using {}".format(self.Name, self.GPIOchannel))
+        schedule.every(1).seconds.do(self.Blink).tag(self.Name)
         
     def Stop (self):
         print ("{} stopped".format(self.Name))
+        schedule.clear(self.Name)
 
 def crc(fileName):
     prev = 0
@@ -41,20 +48,31 @@ def LoadConfig(file = configFile):
         mySwitches.append(s)
     
     for s in mySwitches:
-        print ('Switch {} using GPIO#{}'.format(s.Name, s.GPIOchannel))
+        # print ('Switch {} using GPIO#{}'.format(s.Name, s.GPIOchannel))
+        s.Start()
+        
+
 
 def jobCheckConfig():
     global configCRC
     if configCRC == crc(configFile):
         print('Configuration unchaged')
     else:
-        print('Configuration chaged... Reloading')
+        print('Configuration chaged!! Reloading...')
+        for s in mySwitches:
+            s.Stop()
+            del s
         mySwitches.clear()
+        
         LoadConfig()
         configCRC = crc(configFile)
 
+
+
 LoadConfig()
-schedule.every(1).seconds.do(jobCheckConfig)
+schedule.every(10).seconds.do(jobCheckConfig)
+
+
 
 while 1:
     schedule.run_pending()
