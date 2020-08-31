@@ -5,10 +5,16 @@ import schedule
 import time
 import datetime
 from astral import Astral
+from bottle import route, run
+import threading
+import logging
+from termcolor import colored
 
 configFile = "Relay.ini"
 myCity = ""
 myDepression = ""
+myAddress = "localhost"
+myPort = "80"
 mySwitches = list()
 
 class Switch:
@@ -19,14 +25,13 @@ class Switch:
     _timeOff = ""
     
     def jobRelayOn(self):
-        print("{} turned on {}, type {}".format(self.Name, self.GPIOchannel, self.Type))
+        print(colored("{} turned on {}, type {}".format(self.Name, self.GPIOchannel, self.Type), 'green'))
 
     def jobRelayOff(self):
-        print("{} turned off {}, type {}".format(self.Name, self.GPIOchannel, self.Type))
+        print(colored("{} turned off {}, type {}".format(self.Name, self.GPIOchannel, self.Type), 'red'))
     
     def Start(self):
-        print ("'{}' started using {} on {}, off {}".format(self.Name, self.GPIOchannel, self.timeOn, self.timeOff))
-        #schedule.every(1).seconds.do(self.Blink).tag(self.Name)
+        logging.info("'{}' started using {} on {}, off {}".format(self.Name, self.GPIOchannel, self.timeOn, self.timeOff))
         schedule.every().day.at(str(self.timeOn)).do(self.jobRelayOn)
         schedule.every().day.at(str(self.timeOff)).do(self.jobRelayOff)
         
@@ -50,9 +55,15 @@ def LoadConfig(file = configFile):
         if e == "Global":
             for name, value in config.items(e):
                 if name == "city":
+                    global myCity
                     myCity = value
                 elif name == "depression":
+                    global myDepression
                     myDepression = value
+                elif name == "address":
+                    myAddress = value
+                elif name == "port":
+                    myPort = value
         else:
             s = Switch()
             s.Name = e
@@ -85,26 +96,74 @@ def LoadConfig(file = configFile):
             s.timeOn = dusk
             s.timeOff = dawn
 
-        # print ('Switch {} using GPIO#{}'.format(s.Name, s.GPIOchannel))
         s.Start()
+
+
+
+@route('/')
+def hello():
+    s = mySwitches.count
+    return str(s)
+    
+@route('/get_temp')
+def getTemp():
+    temp = "36.6"
+    return temp
+
+
+
+def jobUpdateAstral():
+    a = Astral()
+    a.solar_depression = myDepression
+    city = a[myCity]
+    
+    sun = city.sun(date=datetime.date(datetime.datetime.today().year, datetime.datetime.today().month, datetime.datetime.today().day), local=True)
+    duskh = str(sun['dusk'])[11:13]
+    duskm = str(sun['dusk'])[14:16]
+    dusk = duskh + ":" + duskm
+    
+    dawnh = str(sun['dawn'])[11:13]
+    dawnm = str(sun['dawn'])[14:16]
+    dawn =  dawnh + ":" + dawnm
+    
+    for s in mySwitches:
+        if s.Type == "Sun":
+            s.Stop()
+            s.timeOn = dusk
+            s.timeOff = dawn
+            s.Start()
+    
+
 
 def jobCheckConfig():
     global configCRC
     if configCRC == crc(configFile):
-        print('Configuration unchaged')
+        logging.info('Configuration unchaged')
     else:
-        print('Configuration chaged!! Reloading...')
+        logging.info('Configuration chaged!! Reloading...')
         for s in mySwitches:
             s.Stop()
             del s
-        mySwitches.clear()
+        #mySwitches.clear()
         
         LoadConfig()
         configCRC = crc(configFile)
 
+format = "%(asctime)s: %(message)s"
+logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
+
 LoadConfig()
-schedule.every(30).seconds.do(jobCheckConfig)
+schedule.every(1).seconds.do(jobCheckConfig)
+schedule.every(2).seconds.do(jobUpdateAstral)
+
+def jobStartWebServer():
+    logging.info('...in job')
+    run(host='10.0.1.11', port=80, debug=True)
+
+#x = threading.Thread(target=jobStartWebServer)
+#logging.info('Staring thread...')
+#x.start
 
 while 1:
     schedule.run_pending()
-    time.sleep(30)
+    time.sleep(1)
