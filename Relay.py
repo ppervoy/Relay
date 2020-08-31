@@ -5,17 +5,20 @@ import schedule
 import time
 import datetime
 from astral import Astral
-from bottle import route, run
-import threading
 import logging
 from termcolor import colored
+import RPi.GPIO as GPIO
+
+
 
 configFile = "Relay.ini"
 myCity = ""
 myDepression = ""
-myAddress = "localhost"
-myPort = "80"
+myAddress = ""
+myPort = ""
 mySwitches = list()
+
+
 
 class Switch:
     _Name = ""
@@ -26,18 +29,23 @@ class Switch:
     
     def jobRelayOn(self):
         print(colored("{} turned on {}, type {}".format(self.Name, self.GPIOchannel, self.Type), 'green'))
+        GPIO.output(int(self.GPIOchannel), GPIO.HIGH)
 
     def jobRelayOff(self):
         print(colored("{} turned off {}, type {}".format(self.Name, self.GPIOchannel, self.Type), 'red'))
+        GPIO.output(int(self.GPIOchannel), GPIO.LOW)
     
     def Start(self):
         logging.info("'{}' started using {} on {}, off {}".format(self.Name, self.GPIOchannel, self.timeOn, self.timeOff))
-        schedule.every().day.at(str(self.timeOn)).do(self.jobRelayOn)
-        schedule.every().day.at(str(self.timeOff)).do(self.jobRelayOff)
+        schedule.every().day.at(str(self.timeOn)).do(self.jobRelayOn).tag(self.Name)
+        schedule.every().day.at(str(self.timeOff)).do(self.jobRelayOff).tag(self.Name)
+        GPIO.setup(int(self.GPIOchannel), GPIO.OUT)
         
     def Stop(self):
-        print ("{} stopped".format(self.Name))
+        print(colored("{} stopped".format(self.Name), 'yellow'))
         schedule.clear(self.Name)
+
+
 
 def crc(fileName):
     prev = 0
@@ -46,6 +54,8 @@ def crc(fileName):
     return "%X"%(prev & 0xFFFFFFFF)
 
 configCRC = crc(configFile)
+
+
 
 def LoadConfig(file = configFile):
     config = configparser.RawConfigParser()
@@ -100,18 +110,6 @@ def LoadConfig(file = configFile):
 
 
 
-@route('/')
-def hello():
-    s = mySwitches.count
-    return str(s)
-    
-@route('/get_temp')
-def getTemp():
-    temp = "36.6"
-    return temp
-
-
-
 def jobUpdateAstral():
     a = Astral()
     a.solar_depression = myDepression
@@ -144,26 +142,26 @@ def jobCheckConfig():
         for s in mySwitches:
             s.Stop()
             del s
-        #mySwitches.clear()
         
         LoadConfig()
         configCRC = crc(configFile)
 
+
+
 format = "%(asctime)s: %(message)s"
-logging.basicConfig(format=format, level=logging.INFO, datefmt="%H:%M:%S")
+logging.basicConfig(format=format, level=logging.ERROR, datefmt="%H:%M:%S")
+GPIO.setmode(GPIO.BCM)
 
-LoadConfig()
-schedule.every(1).seconds.do(jobCheckConfig)
-schedule.every(2).seconds.do(jobUpdateAstral)
 
-def jobStartWebServer():
-    logging.info('...in job')
-    run(host='10.0.1.11', port=80, debug=True)
+    
+if __name__ == '__main__':
+    try:
+        LoadConfig()
+        schedule.every(1).seconds.do(jobCheckConfig)
+        schedule.every(5).days.do(jobUpdateAstral)
 
-#x = threading.Thread(target=jobStartWebServer)
-#logging.info('Staring thread...')
-#x.start
-
-while 1:
-    schedule.run_pending()
-    time.sleep(1)
+        while True:
+            schedule.run_pending()
+            time.sleep(1)
+    except KeyboardInterrupt:
+        GPIO.cleanup()
