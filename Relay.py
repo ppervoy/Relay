@@ -18,19 +18,19 @@ class Switch:
     _timeOn = ""
     _timeOff = ""
     
-    def RelayOn ():
-        print("{} turned on {} of type {}".format(self.Name, self.GPIOchannel, self.Type))
+    def jobRelayOn(self):
+        print("{} turned on {}, type {}".format(self.Name, self.GPIOchannel, self.Type))
 
-    def RelayOff ():
-        print("{} turned off {} of type {}".format(self.Name, self.GPIOchannel, self.Type))
+    def jobRelayOff(self):
+        print("{} turned off {}, type {}".format(self.Name, self.GPIOchannel, self.Type))
     
-    def Start (self):
+    def Start(self):
         print ("'{}' started using {} on {}, off {}".format(self.Name, self.GPIOchannel, self.timeOn, self.timeOff))
         #schedule.every(1).seconds.do(self.Blink).tag(self.Name)
-        schedule.every().day.at(str(self.timeOn)).do(self.RelayOn)
-        schedule.every().day.at(str(self.timeOff)).do(self.RelayOff)
+        schedule.every().day.at(str(self.timeOn)).do(self.jobRelayOn)
+        schedule.every().day.at(str(self.timeOff)).do(self.jobRelayOff)
         
-    def Stop (self):
+    def Stop(self):
         print ("{} stopped".format(self.Name))
         schedule.clear(self.Name)
 
@@ -103,7 +103,7 @@ def jobCheckConfig():
         configCRC = crc(configFile)
 
 LoadConfig()
-schedule.every(1).hour.do(jobCheckConfig)
+schedule.every(30).seconds.do(jobCheckConfig)
 
 while 1:
     schedule.run_pending()
