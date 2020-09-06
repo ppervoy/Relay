@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import datetime
 import zlib
 import gevent
 from gevent import monkey, spawn as gspawn, sleep as gsleep, socket, signal_handler as sig
@@ -12,7 +13,6 @@ from bottle import get, request
 from gevent.pywsgi import WSGIServer
 # from geventwebsocket.handler import WebSocketHandler
 import time
-import datetime
 from astral import Astral
 from termcolor import colored
 import RPi.GPIO as GPIO
@@ -20,9 +20,11 @@ import RPi.GPIO as GPIO
 configFile = "Relay.ini"
 myCity = ""
 myDepression = ""
-myAddress = ""
-myPort = ""
+myAddress = "localhost"
+myPort = "8080"
 mySwitches = list()
+serverStartTime = "1970/01/01 00:00"
+serverLastInit = "1970/01/01 00:00"
 
 
 
@@ -45,14 +47,14 @@ class Switch:
         GPIO.output(int(self.GPIOchannel), GPIO.LOW)
     
     def Start(self):
-        logging.info("'{}' started using {} on {}, off {}".format(self.Name, self.GPIOchannel, self.timeOn, self.timeOff))
+        print(colored("Schedule \"{}\" started using {} on {}, off {}".format(self.Name, self.GPIOchannel, self.timeOn, self.timeOff), "blue"))
         schedule.every().day.at(str(self.timeOn)).do(self.jobRelayOn).tag(self.Name)
         schedule.every().day.at(str(self.timeOff)).do(self.jobRelayOff).tag(self.Name)
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(int(self.GPIOchannel), GPIO.OUT)
         
     def Stop(self):
-        print(colored("{} stopped".format(self.Name), 'yellow'))
+        print(colored("Schdeule \"{}\" stopped".format(self.Name), "blue"))
         schedule.clear(self.Name)
 
 
@@ -68,7 +70,7 @@ configCRC = crc(configFile)
 
 
 
-def LoadConfig(file = configFile):
+def loadConfig(file = configFile):
     config = configparser.RawConfigParser()
     config.read(file)
 
@@ -122,7 +124,9 @@ def LoadConfig(file = configFile):
         s.Start()
         
     GPIO.setmode(GPIO.BCM)
-
+    now = datetime.datetime.now()
+    global serverLastInit
+    serverLastInit = now.strftime("%Y/%m/%d %H:%M:%S")
 
 
 def jobUpdateAstral():
@@ -150,6 +154,7 @@ def jobUpdateAstral():
 
 def jobCheckConfig():
     global configCRC
+    global mySwitches
     
     if configCRC == crc(configFile):
         print("Configuration unchaged")
@@ -158,40 +163,33 @@ def jobCheckConfig():
         for s in mySwitches:
             s.Stop()
             del s
+        mySwitches *= 0
         
-        LoadConfig()
+        loadConfig()
         configCRC = crc(configFile)
 
-#
-#
-#
-def jobCheckSmth():
-    print("Checking in schedule...")
+
+
+def setSchedule():
+    schedule.every(5).seconds.do(jobCheckConfig)
+    schedule.every(1).days.do(jobUpdateAstral)
 
 
 
-def sample():
-    gspawn(jobCheckSmth)
-
-
-
-def set():
-    schedule.every(3600).seconds.do(jobCheckConfig)
-    schedule.every(5).days.do(jobUpdateAstral)
-
-
-
-def start():
+def startServer():
+    now = datetime.datetime.now()
+    global serverStartTime
+    serverStartTime = now.strftime("%Y/%m/%d %H:%M:%S")
+    
     def start_thread():
         while True:
             try:
                 schedule.run_pending()
-            except:
-                print("Scheduler Exception")
+            except Exception as e:
+                print(str(e))
                 
-            gsleep(5)
-    print('Scheduler Started...')
-    
+            gsleep(1)
+                
     gspawn(start_thread)
 
 
@@ -222,21 +220,23 @@ def app():
         res += "<li>" + s.Name + " (triggered by " + s.Type + ", on: " + s.timeOn + " off: " + s.timeOff + ") "
         
         if s.Status:
-            res += '<a href="?toggle=' + s.Name + '">[on]</a>'
+            res += "<a href=\"?toggle=" + s.Name + "\">[on]</a>"
         else:
-            res += '<a href="?toggle=' + s.Name + '">[off]</a>'
+            res += "<a href=\"?toggle=" + s.Name + "\">[off]</a>"
             
-        res += "</li>"
+        res += "</li>\n"
     
-    res += "</ul><br><br><br>"
+    res += "</ul><br><br>"
+    res += "Server started on: " + serverStartTime + ", last init on: " + serverLastInit
+    
     return res
 
 
 
 if __name__ == '__main__':
-    LoadConfig()
-    set()
-    start()
+    loadConfig()
+    setSchedule()
+    startServer()
     botapp = bottle.app()
     server = WSGIServer((myAddress, int(myPort)), botapp)
 #    server = WSGIServer(("10.0.1.223", int(myPort)), botapp , handler_class=WebSocketHandler)
