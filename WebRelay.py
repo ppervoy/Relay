@@ -9,7 +9,7 @@ import configparser
 import logging
 import schedule
 import bottle
-from bottle import get, request
+from bottle import get, request, route, static_file
 from gevent.pywsgi import WSGIServer
 # from geventwebsocket.handler import WebSocketHandler
 import time
@@ -25,6 +25,7 @@ myPort = "8080"
 mySwitches = list()
 serverStartTime = "1970/01/01 00:00"
 serverLastInit = "1970/01/01 00:00"
+plan = ""
 
 
 
@@ -35,6 +36,8 @@ class Switch:
     Status = False
     timeOn = "00:00"
     timeOff = "00:01"
+    imgTop = "0px"
+    imgLeft = "0px"
         
     def jobRelayOn(self):
         print(colored("{} turned on {}, type {}".format(self.Name, self.GPIOchannel, self.Type), 'green'))
@@ -89,6 +92,9 @@ def loadConfig(file = configFile):
                 elif name == "port":
                     global myPort
                     myPort = value
+                elif name == "plan":
+                    global plan
+                    plan = value
         else:
             s = Switch()
             s.Name = e
@@ -100,7 +106,11 @@ def loadConfig(file = configFile):
                 elif name=="timeon":
                     s.timeOn = value
                 elif name=="timeoff":
-                    s.timeOff= value
+                    s.timeOff = value
+                elif name=="imgtop":
+                    s.imgTop = value
+                elif name=="imgleft":
+                    s.imgLeft = value
             mySwitches.append(s)
     
     a = Astral()
@@ -192,11 +202,13 @@ def startServer():
                 
     gspawn(start_thread)
 
-
+@get('/<filename>')
+def img(filename):
+    print("/home/pi/Relay/img" + filename)
+    return static_file(filename, root="/home/pi/Relay/img")
 
 @get('/')
 def app():
-    print("get /")
     global mySwitches
     
     try:
@@ -214,20 +226,18 @@ def app():
                 else:
                     s.jobRelayOn()
     
-    res = "<ul>"
+    #res = "<ul>"
+    global plan
+    res = "<img src=\"" + plan + "\"/>\n"
     
     for s in mySwitches:
-        res += "<li>" + s.Name + " (triggered by " + s.Type + ", on: " + s.timeOn + " off: " + s.timeOff + ") "
         
         if s.Status:
-            res += "<a href=\"?toggle=" + s.Name + "\">[on]</a>"
+            res += "<a href=\"?toggle=" + s.Name + "\"><img src=\"on.png\" style=\"position: absolute; top: " + s.imgTop + "; left: " + s.imgLeft + "\" title=\"" + s.Name + " (triggered by " + s.Type + ", on: " + s.timeOn + " off: " + s.timeOff + ")\"/></a>"
         else:
-            res += "<a href=\"?toggle=" + s.Name + "\">[off]</a>"
+            res += "<a href=\"?toggle=" + s.Name + "\"><img src=\"off.png\" style=\"position: absolute; top: " + s.imgTop + "; left: " + s.imgLeft + "\" title=\"" +s.Name + " (triggered by " + s.Type + ", on: " + s.timeOn + " off: " + s.timeOff  + ")\"/></a>"
             
-        res += "</li>\n"
-    
-    res += "</ul><br><br>"
-    res += "Server started on: " + serverStartTime + ", last init on: " + serverLastInit
+    res += "<br>\n<br>\nServer started on: " + serverStartTime + ", last init on: " + serverLastInit
     
     return res
 
