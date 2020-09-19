@@ -9,19 +9,22 @@ import configparser
 import logging
 import schedule
 import bottle
-from bottle import get, request, route, static_file
+from bottle import get, request, route, static_file, auth_basic
 from gevent.pywsgi import WSGIServer
 # from geventwebsocket.handler import WebSocketHandler
 import time
 from astral import Astral
 from termcolor import colored
 import RPi.GPIO as GPIO
+from passlib.hash import sha256_crypt
 
 configFile = "Relay.ini"
 myCity = ""
 myDepression = ""
-myAddress = "localhost"
-myPort = "8080"
+myAddress = ""
+myPort = ""
+myAdmin = ""
+myPasswd = ""
 mySwitches = list()
 serverStartTime = "1970/01/01 00:00"
 serverLastInit = "1970/01/01 00:00"
@@ -69,6 +72,8 @@ def crc(fileName):
         prev = zlib.crc32(eachLine, prev)
     return "%X"%(prev & 0xFFFFFFFF)
 
+
+
 configCRC = crc(configFile)
 
 
@@ -95,6 +100,12 @@ def loadConfig(file = configFile):
                 elif name == "plan":
                     global plan
                     plan = value
+                elif name == "user":
+                    global myAdmin
+                    myAdmin = value
+                elif name == "passwd":
+                    global myPasswd
+                    myPasswd = value
         else:
             s = Switch()
             s.Name = e
@@ -202,12 +213,23 @@ def startServer():
                 
     gspawn(start_thread)
 
+
+
+def isAuthUser(user, passwd):
+    global myAdmin
+    global myPasswd
+    if user == myAdmin and passwd == myPasswd:
+        return True
+    return False
+
+
+
 @get('/<filename>')
 def img(filename):
-    print("/home/pi/Relay/img" + filename)
     return static_file(filename, root="/home/pi/Relay/img")
 
 @get('/')
+@auth_basic(isAuthUser)
 def app():
     global mySwitches
     
@@ -252,7 +274,7 @@ if __name__ == '__main__':
 #    server = WSGIServer(("10.0.1.223", int(myPort)), botapp , handler_class=WebSocketHandler)
     
     def shutdown():
-        print('Shutting down ...')
+        print('Shutting down...')
         GPIO.cleanup()
         server.stop(timeout=5)
         exit(signal.SIGTERM)
