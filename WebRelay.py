@@ -43,25 +43,29 @@ class Switch:
     imgLeft = "0px"
         
     def jobRelayOn(self):
-        print(colored("{} turned on {}, type {}".format(self.Name, self.GPIOchannel, self.Type), 'green'))
+        # print(colored("{} turned on {}, type {}".format(self.Name, self.GPIOchannel, self.Type), 'green'))
         self.Status = True
         GPIO.output(int(self.GPIOchannel), GPIO.HIGH)
+        logging.info("+++ [%s] turned on %s (%s)", self.Name, self.GPIOchannel, self.Type)
 
     def jobRelayOff(self):
-        print(colored("{} turned off {}, type {}".format(self.Name, self.GPIOchannel, self.Type), 'red'))
+        # print(colored("{} turned off {}, type {}".format(self.Name, self.GPIOchannel, self.Type), 'red'))
         self.Status = False
         GPIO.output(int(self.GPIOchannel), GPIO.LOW)
+        logging.info("--- [%s] turned off %s (%s)", self.Name, self.GPIOchannel, self.Type)
     
     def Start(self):
-        print(colored("Schedule \"{}\" started using {} on {}, off {}".format(self.Name, self.GPIOchannel, self.timeOn, self.timeOff), "blue"))
+        # print(colored("Schedule \"{}\" started using {} on {}, off {}".format(self.Name, self.GPIOchannel, self.timeOn, self.timeOff), "blue"))
         schedule.every().day.at(str(self.timeOn)).do(self.jobRelayOn).tag(self.Name)
         schedule.every().day.at(str(self.timeOff)).do(self.jobRelayOff).tag(self.Name)
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(int(self.GPIOchannel), GPIO.OUT)
+        logging.info("^^^ Schedule [%s] started using %s on %s, off %s", self.Name, self.GPIOchannel, self.timeOn, self.timeOff)
         
     def Stop(self):
-        print(colored("Schdeule \"{}\" stopped".format(self.Name), "blue"))
+        # print(colored("Schdeule \"{}\" stopped".format(self.Name), "blue"))
         schedule.clear(self.Name)
+        logging.info("Schdeule [%s] stopped", self.Name)
 
 
 
@@ -81,6 +85,7 @@ configCRC = crc(configFile)
 def loadConfig(file = configFile):
     config = configparser.RawConfigParser()
     config.read(file)
+    logging.debug("*** Loading config file from %s ***", file)
 
     for e in config.sections():
         if e == "Global":
@@ -106,6 +111,8 @@ def loadConfig(file = configFile):
                 elif name == "passwd":
                     global myPasswd
                     myPasswd = value
+
+            logging.debug("Loaded global settings. City: %s, Depression: %s, web: %s@%s:%s", myCity, myDepression, myAdmin, myAddress, myPort)
         else:
             s = Switch()
             s.Name = e
@@ -122,6 +129,9 @@ def loadConfig(file = configFile):
                     s.imgTop = value
                 elif name=="imgleft":
                     s.imgLeft = value
+
+            logging.debug("Loaded [%s] Type: %s, Channel: %s, TimeON: %s, TimeOFF: %s, X: %s, Y: %s", s.Name, s.Type, s.GPIOchannel, s.timeOn, s.timeOff, s.imgLeft, s.imgTop)
+
             mySwitches.append(s)
     
     a = Astral()
@@ -132,10 +142,14 @@ def loadConfig(file = configFile):
     duskh = str(sun['dusk'])[11:13]
     duskm = str(sun['dusk'])[14:16]
     dusk = duskh + ":" + duskm
+
+    logging.debug("%s dusk in %s today is %s", myDepression, myCity, dusk)
     
     dawnh = str(sun['dawn'])[11:13]
     dawnm = str(sun['dawn'])[14:16]
     dawn =  dawnh + ":" + dawnm
+
+    logging.debug("%s dawn in %s today is %s", myDepression, myCity, dawn)
     
     for s in mySwitches:
         if s.Type == "Sun":
@@ -146,8 +160,11 @@ def loadConfig(file = configFile):
         
     GPIO.setmode(GPIO.BCM)
     now = datetime.datetime.now()
+    
     global serverLastInit
     serverLastInit = now.strftime("%Y/%m/%d %H:%M:%S")
+
+    logging.debug("*** Initialization is complete ***")
 
 
 def jobUpdateAstral():
@@ -159,10 +176,14 @@ def jobUpdateAstral():
     duskh = str(sun['dusk'])[11:13]
     duskm = str(sun['dusk'])[14:16]
     dusk = duskh + ":" + duskm
+
+    logging.debug("New %s dusk in %s is set to %s", myDepression, myCity, dawn)
     
     dawnh = str(sun['dawn'])[11:13]
     dawnm = str(sun['dawn'])[14:16]
     dawn =  dawnh + ":" + dawnm
+
+    logging.debug("New %s dawn in %s is set to %s", myDepression, myCity, dawn)
     
     for s in mySwitches:
         if s.Type == "Sun":
@@ -178,9 +199,9 @@ def jobCheckConfig():
     global mySwitches
     
     if configCRC == crc(configFile):
-        print("Configuration unchaged")
+        logging.debug("Configuration unchaged")
     else:
-        print("Configuration chaged!! Reloading...")
+        logging.info("Configuration chaged! Reloading...")
         for s in mySwitches:
             s.Stop()
             del s
@@ -192,7 +213,7 @@ def jobCheckConfig():
 
 
 def setSchedule():
-    schedule.every(5).seconds.do(jobCheckConfig)
+    schedule.every(60).seconds.do(jobCheckConfig)
     schedule.every(1).days.do(jobUpdateAstral)
 
 
@@ -219,8 +240,14 @@ def isAuthUser(user, passwd):
     global myAdmin
     global myPasswd
     if user == myAdmin and passwd == myPasswd:
+        from_ip = request.environ.get('REMOTE_ADDR')
+        logging.info("Successful login from %s", from_ip)
         return True
-    return False
+    else:
+        logging.warning("Failed login from %s", request.environ.get('REMOTE_ADDR'))
+        logging.debug("L: %s, P: %s", user, passwd)
+        logging.debug("Client: %s", request.environ.get('HTTP_USER_AGENT'))
+        return False
 
 
 
@@ -248,9 +275,10 @@ def app():
                 else:
                     s.jobRelayOn()
     
-    #res = "<ul>"
     global plan
-    res = "<img src=\"" + plan + "\"/>\n"
+    
+    res = "<html>\n<head>\n<title>WebRelay</title>\n</head>\n\n\n<body>\n"
+    res += "<img src=\"" + plan + "\"/>\n"
     
     for s in mySwitches:
         
@@ -260,21 +288,22 @@ def app():
             res += "<a href=\"?toggle=" + s.Name + "\"><img src=\"off.png\" style=\"position: absolute; top: " + s.imgTop + "; left: " + s.imgLeft + "\" title=\"" +s.Name + " (triggered by " + s.Type + ", on: " + s.timeOn + " off: " + s.timeOff  + ")\"/></a>"
             
     res += "<br>\n<br>\nServer started on: " + serverStartTime + ", last init on: " + serverLastInit
+    res += "</body>\n</html>\n"
     
     return res
 
 
 
 if __name__ == '__main__':
+    logging.basicConfig(filename="WebRelay.log", format='%(asctime)s - %(message)s', level=logging.DEBUG, datefmt='%y/%m/%d %H:%M:%S')
     loadConfig()
     setSchedule()
     startServer()
     botapp = bottle.app()
     server = WSGIServer((myAddress, int(myPort)), botapp)
-#    server = WSGIServer(("10.0.1.223", int(myPort)), botapp , handler_class=WebSocketHandler)
     
     def shutdown():
-        print('Shutting down...')
+        logging.info("Shutting down...")
         GPIO.cleanup()
         server.stop(timeout=5)
         exit(signal.SIGTERM)
