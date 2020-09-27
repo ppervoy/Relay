@@ -9,6 +9,7 @@ import configparser
 import logging
 import schedule
 import bottle
+import requests
 from bottle import get, request, route, static_file, auth_basic
 from gevent.pywsgi import WSGIServer
 # from geventwebsocket.handler import WebSocketHandler
@@ -29,6 +30,7 @@ mySwitches = list()
 serverStartTime = "1970/01/01 00:00"
 serverLastInit = "1970/01/01 00:00"
 plan = ""
+iftttKey = ""
 
 
 
@@ -60,7 +62,7 @@ class Switch:
         schedule.every().day.at(str(self.timeOff)).do(self.jobRelayOff).tag(self.Name)
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(int(self.GPIOchannel), GPIO.OUT)
-        logging.info("^^^ Schedule [%s] started using %s on %s, off %s", self.Name, self.GPIOchannel, self.timeOn, self.timeOff)
+        logging.info("^^^ Schedule [%s] started using %s on %s, off %s", self.Name, self.GPIOchannel, self.timeOn, self.timeOff)        
         
     def Stop(self):
         # print(colored("Schdeule \"{}\" stopped".format(self.Name), "blue"))
@@ -89,30 +91,25 @@ def loadConfig(file = configFile):
 
     for e in config.sections():
         if e == "Global":
-            for name, value in config.items(e):
-                if name == "city":
-                    global myCity
-                    myCity = value
-                elif name == "depression":
-                    global myDepression
-                    myDepression = value
-                elif name == "address":
-                    global myAddress
-                    myAddress = value
-                elif name == "port":
-                    global myPort
-                    myPort = value
-                elif name == "plan":
-                    global plan
-                    plan = value
-                elif name == "user":
-                    global myAdmin
-                    myAdmin = value
-                elif name == "passwd":
-                    global myPasswd
-                    myPasswd = value
+            global myCity
+            global myDepression
+            global myAddress            
+            global myPort            
+            global plan            
+            global myAdmin            
+            global myPasswd
+            global iftttKey
 
-            logging.debug("Loaded global settings. City: %s, Depression: %s, web: %s@%s:%s", myCity, myDepression, myAdmin, myAddress, myPort)
+            myCity = config["Global"]["City"]
+            myDepression = config["Global"]["Depression"]
+            myAddress = config["Global"]["Address"]
+            myPort = config["Global"]["Port"]
+            plan = config["Global"]["Plan"]
+            myAdmin = config["Global"]["user"]
+            myPasswd = config["Global"]["passwd"]
+            iftttKey = config["Global"]["iftttKey"]
+
+            logging.debug("Loaded global settings. City: %s, Depression: %s, web: %s@%s:%s Notifications key: %s", myCity, myDepression, myAdmin, myAddress, myPort, iftttKey)
         else:
             s = Switch()
             s.Name = e
@@ -165,6 +162,7 @@ def loadConfig(file = configFile):
     serverLastInit = now.strftime("%Y/%m/%d %H:%M:%S")
 
     logging.debug("*** Initialization is complete ***")
+    requests.post("https://maker.ifttt.com/trigger/notify/with/key/" + iftttKey, params={"value1":"none","value2":"none","value3":"none"})
 
 
 def jobUpdateAstral():
