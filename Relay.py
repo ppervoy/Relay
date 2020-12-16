@@ -29,11 +29,17 @@ class Switch:
     
     def jobRelayOn(self):
         print(colored("{} turned on {}, type {}".format(self.Name, self.GPIOchannel, self.Type), 'green'))
-        GPIO.output(int(self.GPIOchannel), GPIO.HIGH)
+        if myNormal == "closed":
+        	GPIO.output(int(self.GPIOchannel), GPIO.HIGH)
+        else:
+        	GPIO.output(int(self.GPIOchannel), GPIO.LOW)
 
     def jobRelayOff(self):
         print(colored("{} turned off {}, type {}".format(self.Name, self.GPIOchannel, self.Type), 'red'))
-        GPIO.output(int(self.GPIOchannel), GPIO.LOW)
+        if myNormal == "closed":
+        	GPIO.output(int(self.GPIOchannel), GPIO.LOW)
+        else:
+        	GPIO.output(int(self.GPIOchannel), GPIO.HIGH)
     
     def Start(self):
         logging.info("'{}' started using {} on {}, off {}".format(self.Name, self.GPIOchannel, self.timeOn, self.timeOff))
@@ -74,6 +80,8 @@ def LoadConfig(file = configFile):
                     myAddress = value
                 elif name == "port":
                     myPort = value
+                elif name == "normal":
+                	myNormal = value
         else:
             s = Switch()
             s.Name = e
