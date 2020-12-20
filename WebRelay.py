@@ -19,13 +19,15 @@ from termcolor import colored
 import RPi.GPIO as GPIO
 from passlib.hash import sha256_crypt
 
-configFile = "Relay.ini"
+configFile = "WebRelay.ini"
+myLogFile = "/var/log/WebRelay.log"
 myCity = ""
 myDepression = ""
 myAddress = ""
 myPort = ""
 myAdmin = ""
 myPasswd = ""
+myNormally = ""
 mySwitches = list()
 serverStartTime = "1970/01/01 00:00"
 serverLastInit = "1970/01/01 00:00"
@@ -47,14 +49,26 @@ class Switch:
     def jobRelayOn(self):
         # print(colored("{} turned on {}, type {}".format(self.Name, self.GPIOchannel, self.Type), 'green'))
         self.Status = True
-        GPIO.output(int(self.GPIOchannel), GPIO.HIGH)
+
+        if myNormally == "closed":
+            GPIO.output(int(self.GPIOchannel), GPIO.LOW)
+        else:
+            GPIO.output(int(self.GPIOchannel), GPIO.HIGH)
+
         logging.info("+++ [%s] turned on %s (%s)", self.Name, self.GPIOchannel, self.Type)
+        # sendMessage(self.Name + " turned on")
 
     def jobRelayOff(self):
         # print(colored("{} turned off {}, type {}".format(self.Name, self.GPIOchannel, self.Type), 'red'))
         self.Status = False
-        GPIO.output(int(self.GPIOchannel), GPIO.LOW)
+
+        if myNormally == "closed":
+            GPIO.output(int(self.GPIOchannel), GPIO.HIGH)
+        else:
+            GPIO.output(int(self.GPIOchannel), GPIO.LOW)
+
         logging.info("--- [%s] turned off %s (%s)", self.Name, self.GPIOchannel, self.Type)
+        # sendMessage(self.Name + " turned off")
     
     def Start(self):
         # print(colored("Schedule \"{}\" started using {} on {}, off {}".format(self.Name, self.GPIOchannel, self.timeOn, self.timeOff), "blue"))
@@ -62,7 +76,28 @@ class Switch:
         schedule.every().day.at(str(self.timeOff)).do(self.jobRelayOff).tag(self.Name)
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(int(self.GPIOchannel), GPIO.OUT)
-        logging.info("^^^ Schedule [%s] started using %s on %s, off %s", self.Name, self.GPIOchannel, self.timeOn, self.timeOff)        
+
+        now = datetime.datetime.now()
+
+        today = datetime.date.today()
+        t = datetime.datetime.strptime(self.timeOn, '%H:%M').time()
+        myTimeOn = datetime.datetime.combine(today, t)
+
+        t = datetime.datetime.strptime(self.timeOff, '%H:%M').time()
+        myTimeOff = datetime.datetime.combine(today, t)
+
+        self.jobRelayOff()
+
+        if ((myTimeOn > myTimeOff) and (now > myTimeOn)):
+            self.jobRelayOn()
+        elif ((myTimeOn > myTimeOff) and (now < myTimeOff)):
+            self.jobRelayOn()
+
+        if (myTimeOn < myTimeOff) and (now > myTimeOn) and (now < myTimeOff):
+            self.jobRelayOn()
+
+        logging.info("^^^ Schedule [%s] started using %s on %s, off %s", self.Name, self.GPIOchannel, self.timeOn, self.timeOff)
+        # sendMessage(self.Name + " schdeuled on: " + self.timeOn + " off: " + self.timeOff)
         
     def Stop(self):
         # print(colored("Schdeule \"{}\" stopped".format(self.Name), "blue"))
@@ -98,6 +133,7 @@ def loadConfig(file = configFile):
             global plan            
             global myAdmin            
             global myPasswd
+            global myNormally
             global iftttKey
 
             myCity = config["Global"]["City"]
@@ -107,9 +143,10 @@ def loadConfig(file = configFile):
             plan = config["Global"]["Plan"]
             myAdmin = config["Global"]["user"]
             myPasswd = config["Global"]["passwd"]
+            myNormally = config["Global"]["normally"]
             iftttKey = config["Global"]["iftttKey"]
 
-            logging.debug("Loaded global settings. City: %s, Depression: %s, web: %s@%s:%s Notifications key: %s", myCity, myDepression, myAdmin, myAddress, myPort, iftttKey)
+            logging.debug("Loaded global settings. City: %s, Depression: %s, web: %s@%s:%s Notifications key: %s, Relays are normally %s", myCity, myDepression, myAdmin, myAddress, myPort, iftttKey, myNormally)
         else:
             s = Switch()
             s.Name = e
@@ -148,6 +185,8 @@ def loadConfig(file = configFile):
 
     logging.debug("%s dawn in %s today is %s", myDepression, myCity, dawn)
     
+    GPIO.setmode(GPIO.BCM)
+    
     for s in mySwitches:
         if s.Type == "Sun":
             s.timeOn = dusk
@@ -155,14 +194,16 @@ def loadConfig(file = configFile):
 
         s.Start()
         
-    GPIO.setmode(GPIO.BCM)
-    now = datetime.datetime.now()
-    
     global serverLastInit
+    now = datetime.datetime.now()
     serverLastInit = now.strftime("%Y/%m/%d %H:%M:%S")
 
     logging.debug("*** Initialization is complete ***")
-    requests.post("https://maker.ifttt.com/trigger/notify/with/key/" + iftttKey, params={"value1":"none","value2":"none","value3":"none"})
+    sendMessage ("Server initialized")
+
+
+def sendMessage (t1, t2 = "", t3 = ""):
+	requests.post("https://maker.ifttt.com/trigger/notify/with/key/" + iftttKey, params={"value1":t1,"value2":t2,"value3":t3})
 
 
 def jobUpdateAstral():
@@ -207,6 +248,7 @@ def jobCheckConfig():
         
         loadConfig()
         configCRC = crc(configFile)
+        # sendMessage("New configuration loaded!")
 
 
 
@@ -232,6 +274,8 @@ def startServer():
                 
     gspawn(start_thread)
 
+    # sendMessage("Server started")
+
 
 
 def isAuthUser(user, passwd):
@@ -242,9 +286,12 @@ def isAuthUser(user, passwd):
         logging.info("Successful login from %s", from_ip)
         return True
     else:
-        logging.warning("Failed login from %s", request.environ.get('REMOTE_ADDR'))
+        logging.warning("!!! Failed login from %s", request.environ.get('REMOTE_ADDR'))
         logging.debug("L: %s, P: %s", user, passwd)
         logging.debug("Client: %s", request.environ.get('HTTP_USER_AGENT'))
+
+        sendMessage("Failed login attempt from " + request.environ.get('REMOTE_ADDR') + " " + request.environ.get('HTTP_USER_AGENT') + " Username: " + user + " Password: " + passwd)
+
         return False
 
 
@@ -293,7 +340,7 @@ def app():
 
 
 if __name__ == '__main__':
-    logging.basicConfig(filename="WebRelay.log", format='%(asctime)s - %(message)s', level=logging.DEBUG, datefmt='%y/%m/%d %H:%M:%S')
+    logging.basicConfig(filename=myLogFile, format='%(asctime)s - %(message)s', level=logging.WARNING, datefmt='%y/%m/%d %H:%M:%S')
     loadConfig()
     setSchedule()
     startServer()
