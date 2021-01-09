@@ -11,11 +11,11 @@ if __name__ == '__main__':
         GPIO.setup(GPIOchannel, GPIO.OUT)
         
         while True:
-            #GPIO.output(int(GPIOchannel), GPIO.LOW)
+            GPIO.output(int(GPIOchannel), GPIO.LOW)
             sys.stdout.write("-")
             sys.stdout.flush() 
             time.sleep(0.35)
-            #GPIO.output(int(GPIOchannel), GPIO.HIGH)
+            GPIO.output(int(GPIOchannel), GPIO.HIGH)
             sys.stdout.write("\b")
             sys.stdout.write("+")
             sys.stdout.flush()
