@@ -68,7 +68,6 @@ class Switch:
             GPIO.output(int(self.GPIOchannel), GPIO.LOW)
 
         logging.info("--- [%s] turned off %s (%s)", self.Name, self.GPIOchannel, self.Type)
-        # sendMessage(self.Name + " turned off")
 
     def Start(self):
         # print(colored("Schedule \"{}\" started using {} on {}, off {}".format(self.Name, self.GPIOchannel, self.timeOn, self.timeOff), "blue"))
@@ -235,20 +234,27 @@ def jobUpdateAstral():
 
 
 
-def jobCheckConfig():
-    global configCRC
-    global mySwitches
+def ReLoadConfig():
+        global mySwitches
 
-    if configCRC == crc(configFile):
-        logging.debug("Configuration unchaged")
-    else:
-        logging.debug("Configuration chaged! Reloading...")
         for s in mySwitches:
             s.Stop()
             del s
         mySwitches *= 0
 
         loadConfig()
+
+
+
+def jobCheckConfig():
+    global configCRC
+
+    if configCRC == crc(configFile):
+        logging.debug("Configuration unchaged")
+    else:
+        logging.debug("Configuration chaged! Reloading...")
+
+        ReLoadConfig()
         configCRC = crc(configFile)
 
 
@@ -324,7 +330,7 @@ def app():
                 else:
                     s.jobRelayOn()
 
-    if WebAction == "reloadConfig": loadConfig()
+    if WebAction == "reloadConfig": ReLoadConfig()
 
     global plan
     res = "<html>\n<head>\n<title>WebRelay</title>\n</head>\n\n\n<body>\n"
@@ -333,12 +339,18 @@ def app():
     for s in mySwitches:
 
         if s.Status:
-            res += "<a href=\"?toggle=" + s.Name + "\"><img src=\"on.png\" style=\"position: absolute; top: " + s.imgTop + "; left: " + s.imgLeft + "\" title=\"" + s.Name + " (triggered by " + s.Type + ", on: " + s.timeOn + " off: " + s.timeOff + ")\"/></a>"
+            if s.Type == "Manual":
+                res += "<a href=\"?toggle=" + s.Name + "\"><img src=\"on.png\" style=\"position: absolute; top: " + s.imgTop + "; left: " + s.imgLeft + "\" title=\"" + s.Name + " (Manual)\"/></a>"
+            else:
+                res += "<a href=\"?toggle=" + s.Name + "\"><img src=\"on.png\" style=\"position: absolute; top: " + s.imgTop + "; left: " + s.imgLeft + "\" title=\"" + s.Name + " (triggered by " + s.Type + ", on: " + s.timeOn + " off: " + s.timeOff + ")\"/></a>"
         else:
-            res += "<a href=\"?toggle=" + s.Name + "\"><img src=\"off.png\" style=\"position: absolute; top: " + s.imgTop + "; left: " + s.imgLeft + "\" title=\"" +s.Name + " (triggered by " + s.Type + ", on: " + s.timeOn + " off: " + s.timeOff  + ")\"/></a>"
+            if s.Type == "Manual":
+                res += "<a href=\"?toggle=" + s.Name + "\"><img src=\"off.png\" style=\"position: absolute; top: " + s.imgTop + "; left: " + s.imgLeft + "\" title=\"" +s.Name + " (Manual)\"/></a>"
+            else:
+                res += "<a href=\"?toggle=" + s.Name + "\"><img src=\"off.png\" style=\"position: absolute; top: " + s.imgTop + "; left: " + s.imgLeft + "\" title=\"" +s.Name + " (triggered by " + s.Type + ", on: " + s.timeOn + " off: " + s.timeOff  + ")\"/></a>"
 
-    res += "<br>\n<br>\nServer started on: " + serverStartTime + ", last config loaded on: " + serverLastInit + " <a href=\"?action=reloadConfig\">[reload]</a>" + WebAction
-    logTail = os.popen("tail " + myLogFile).read()
+    res += "<br>\n<br>\nServer started on: " + serverStartTime + ", last config loaded on: " + serverLastInit + " <a href=\"?action=reloadConfig\">[reload]</a>"
+    logTail = os.popen("tail -n20" + myLogFile).read()
     res += "<hr>\n<pre>\n" + logTail + "</pre>\n"
     res += "</body>\n</html>\n"
 
