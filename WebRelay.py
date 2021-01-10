@@ -327,8 +327,10 @@ def app():
 
                 if s.Status:
                     s.jobRelayOff()
+                    s.Stop()
                 else:
                     s.jobRelayOn()
+                    s.Stop()
 
     if WebAction == "reloadConfig": ReLoadConfig()
 
@@ -350,7 +352,7 @@ def app():
                 res += "<a href=\"?toggle=" + s.Name + "\"><img src=\"off.png\" style=\"position: absolute; top: " + s.imgTop + "; left: " + s.imgLeft + "\" title=\"" +s.Name + " (triggered by " + s.Type + ", on: " + s.timeOn + " off: " + s.timeOff  + ")\"/></a>"
 
     res += "<br>\n<br>\nServer started on: " + serverStartTime + ", last config loaded on: " + serverLastInit + " <a href=\"?action=reloadConfig\">[reload]</a>"
-    logTail = os.popen("tail -n20" + myLogFile).read()
+    logTail = os.popen("tail -n20 " + myLogFile).read()
     res += "<hr>\n<pre>\n" + logTail + "</pre>\n"
     res += "</body>\n</html>\n"
 
