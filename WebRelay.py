@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python2.7
 import datetime
 import zlib
 import gevent
@@ -288,7 +288,7 @@ def isAuthUser(user, passwd):
     global myPasswd
     if user == myAdmin and myPasswd == bcrypt.hashpw(passwd.encode('utf-8'), myPasswd[:29]):
         from_ip = request.environ.get('REMOTE_ADDR')
-        logging.info("Successful login from %s", from_ip)
+        logging.debug("Successful login from %s", from_ip)
         return True
     else:
         logging.warning("!!! Failed login from %s", request.environ.get('REMOTE_ADDR'))
@@ -351,8 +351,8 @@ def app():
             else:
                 res += "<a href=\"?toggle=" + s.Name + "\"><img src=\"off.png\" style=\"position: absolute; top: " + s.imgTop + "; left: " + s.imgLeft + "\" title=\"" +s.Name + " (triggered by " + s.Type + ", on: " + s.timeOn + " off: " + s.timeOff  + ")\"/></a>"
 
-    res += "<br>\n<br>\nServer started on: " + serverStartTime + ", last config loaded on: " + serverLastInit + " <a href=\"?action=reloadConfig\">[reload]</a>"
-    logTail = os.popen("tail -n20 " + myLogFile).read()
+    res += "<br>\n<br>\nServer started on: " + serverStartTime + " <a href=\"/\">[Refresh]</a> Last config loaded on: " + serverLastInit + " <a href=\"?action=reloadConfig\">[reload]</a>"
+    logTail = os.popen("tail -n16 " + myLogFile).read()
     res += "<hr>\n<pre>\n" + logTail + "</pre>\n"
     res += "</body>\n</html>\n"
 

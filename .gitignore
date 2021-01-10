@@ -2,3 +2,6 @@
 WebRelay.log
 WebRelay.ini
 WebRelay.old_ini
+._WebRelay.py
+img/._off.png
+._.gitignore
