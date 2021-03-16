@@ -5,3 +5,6 @@ WebRelay.old_ini
 ._WebRelay.py
 img/._off.png
 ._.gitignore
+WebRelay.cert
+WebRelay.key
+
