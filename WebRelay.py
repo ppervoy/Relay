@@ -217,7 +217,7 @@ def jobUpdateAstral():
     duskm = str(sun['dusk'])[14:16]
     dusk = duskh + ":" + duskm
 
-    logging.debug("New %s dusk in %s is set to %s", myDepression, myCity, dawn)
+    logging.debug("New %s dusk in %s is set to %s", myDepression, myCity, dusk)
 
     dawnh = str(sun['dawn'])[11:13]
     dawnm = str(sun['dawn'])[14:16]
@@ -230,6 +230,7 @@ def jobUpdateAstral():
             s.Stop()
             s.timeOn = dusk
             s.timeOff = dawn
+            logging.info(">>> Astral updated %s and %s", dusk, dawn)
             s.Start()
 
 
@@ -261,7 +262,7 @@ def jobCheckConfig():
 
 def setSchedule():
     schedule.every(1).minutes.do(jobCheckConfig)
-    schedule.every(1).days.do(jobUpdateAstral)
+    schedule.every().day.at("12:00").do(jobUpdateAstral)
 
 
 
