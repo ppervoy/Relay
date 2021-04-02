@@ -21,7 +21,8 @@ import RPi.GPIO as GPIO
 from passlib.hash import sha256_crypt
 
 configFile = "WebRelay.ini"
-myLogFile = "/var/log/WebRelay.log"
+myLogFile = "WebRelay.log"
+myBlacklist = "blacklist.ips"
 myCity = ""
 myDepression = ""
 myAddress = ""
@@ -34,7 +35,10 @@ serverStartTime = "1970/01/01 00:00"
 serverLastInit = "1970/01/01 00:00"
 plan = ""
 iftttKey = ""
-
+lastFailed = time.time()
+myTimeGap = 30
+failedIPs = {}
+blockAfter = 10
 
 class Switch:
     Name = ""
@@ -282,6 +286,29 @@ def startServer():
 
     gspawn(start_thread)
 
+def FailedLogin(src_ip):
+	global lastFailed
+	global myBlacklist
+	global myTimeGap
+
+	if time.time() - lastFailed <= myTimeGap:
+		lastFailed = time.time()
+
+		if failedIPs.get(src_ip) == None:
+			failedIPs[src_ip] = 1
+		else:
+			failedIPs[src_ip] = failedIPs[src_ip] + 1	
+
+		if failedIPs[src_ip] >= blockAfter:
+			f = open(myBlacklist, "a+")
+			f.write(src_ip)
+			f.close()
+			
+			sendMessage("Bruteforce blocked from " + src_ip)
+			res = ""
+			# res = os.popen("ufw deny from " + scr_ip).read()
+			logging.warning("Added to blacklist %s: %s", src_ip, res)
+
 
 
 def isAuthUser(user, passwd):
@@ -292,11 +319,13 @@ def isAuthUser(user, passwd):
         logging.debug("Successful login from %s", from_ip)
         return True
     else:
+    	FailedLogin(request.environ.get('REMOTE_ADDR'))
+
         logging.warning("!!! Failed login from %s", request.environ.get('REMOTE_ADDR'))
         logging.debug("L: %s, P: %s", user, passwd)
         logging.debug("Client: %s", request.environ.get('HTTP_USER_AGENT'))
 
-        sendMessage("Failed login attempt from " + request.environ.get('REMOTE_ADDR') + " " + request.environ.get('HTTP_USER_AGENT') + " Username: " + user + " Password: " + passwd)
+        # sendMessage("Failed login attempt from " + request.environ.get('REMOTE_ADDR') + " " + request.environ.get('HTTP_USER_AGENT') + " Username: " + user + " Password: " + passwd)
 
         return False
 

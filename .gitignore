@@ -7,4 +7,4 @@ img/._off.png
 ._.gitignore
 WebRelay.cert
 WebRelay.key
-
+blacklist.ips
